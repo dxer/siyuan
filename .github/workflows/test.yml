@@ -1,0 +1,36 @@
+name: Release Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: '镜像标签，留空则使用 package.json 中的版本号。务必注意：请确认选择了正确的分支。完整输入示例：3.0.11-rc0 '
+        required: true
+        default: ''
+  push:
+    branches:
+      - master
+
+# ref https://docs.github.com/zh/actions/learn-github-actions/variables
+env:
+  repo_name_android: "siyuan-android"
+  repo_name: "siyuan"
+  repo_owner: "siyuan-note"
+  package_json: "app/package.json"
+  docker_hub_owner: "b3log"
+  docker_hub_repo: "siyuan"
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PWD }}
