@@ -14,7 +14,7 @@ import {
     focusSideBlock,
     getEditorRange,
     getSelectionOffset,
-    setFirstNodeRange,
+    setFirstNodeRange, setInsertWbrHTML,
     setLastNodeRange,
 } from "../util/selection";
 import {Constants} from "../../constants";
@@ -96,6 +96,7 @@ import {openLink} from "../../editor/openLink";
 import {mathRender} from "../render/mathRender";
 import {editAssetItem} from "../render/av/asset";
 import {img3115} from "../../boot/compatibleVersion";
+import {globalClickHideMenu} from "../../boot/globalEvent/click";
 
 export class WYSIWYG {
     public lastHTMLs: { [key: string]: string } = {};
@@ -383,8 +384,10 @@ export class WYSIWYG {
                         this.emojiToMd(tempElement);
                     }
                     html = tempElement.innerHTML;
+                    textPlain = range.toString();
                 } else if (selectImgElement) {
                     html = selectImgElement.outerHTML;
+                    textPlain = selectImgElement.querySelector("img").getAttribute("data-src");
                 } else if (selectTypes.length > 0 && range.startContainer.nodeType === 3 && range.startContainer.parentElement.tagName === "SPAN" &&
                     range.startContainer.parentElement.isSameNode(range.endContainer.parentElement)) {
                     // 复制粗体等字体中的一部分
@@ -400,6 +403,7 @@ export class WYSIWYG {
                     }
                     spanElement.textContent = range.toString();
                     html = spanElement.outerHTML;
+                    textPlain = range.toString();
                 } else {
                     tempElement.append(range.cloneContents());
                     this.emojiToMd(tempElement);
@@ -415,6 +419,8 @@ export class WYSIWYG {
                         textPlain = tempElement.textContent.replace(Constants.ZWSP, "").replace(/\n$/, "");
                     } else if (hasClosestByMatchTag(range.startContainer, "CODE")) {
                         textPlain = tempElement.textContent.replace(Constants.ZWSP, "");
+                    } else {
+                        textPlain = range.toString();
                     }
                 }
             }
@@ -673,7 +679,7 @@ export class WYSIWYG {
 
                 const imgElement = dragElement.parentElement.parentElement;
                 if (dragElement.tagName === "IMG") {
-                   img3115(imgElement);
+                    img3115(imgElement);
                 }
                 documentSelf.onmousemove = (moveEvent: MouseEvent) => {
                     if (dragElement.tagName === "IMG") {
@@ -1514,7 +1520,8 @@ export class WYSIWYG {
                 updateTransaction(protyle, nodeElement.getAttribute("data-node-id"), nodeElement.outerHTML, oldHTML);
             } else {
                 const id = nodeElement.getAttribute("data-node-id");
-                const oldHTML = nodeElement.outerHTML;
+                setInsertWbrHTML(nodeElement, range, protyle);
+                const oldHTML = protyle.wysiwyg.lastHTMLs[id] || nodeElement.outerHTML;
                 const tempElement = document.createElement("div");
                 // 首次选中标题时，range.startContainer 会为空
                 let startContainer = range.startContainer;
@@ -1658,7 +1665,8 @@ export class WYSIWYG {
                 }
                 if (nodeElement.parentElement.parentElement && !isFoldHeading && !nodeElement.classList.contains("av")) {
                     // 选中 heading 时，使用删除的 transaction
-                    updateTransaction(protyle, id, nodeElement.outerHTML, oldHTML);
+                    setInsertWbrHTML(nodeElement, range, protyle);
+                    updateTransaction(protyle, id, protyle.wysiwyg.lastHTMLs[id] || nodeElement.outerHTML, oldHTML);
                 }
             }
             protyle.hint.render(protyle);
@@ -2011,9 +2019,7 @@ export class WYSIWYG {
             const range = getEditorRange(protyle.wysiwyg.element);
             const nodeElement = hasClosestBlock(range.startContainer);
             if (!isMac() && nodeElement) {
-                range.insertNode(document.createElement("wbr"));
-                protyle.wysiwyg.lastHTMLs[nodeElement.getAttribute("data-node-id")] = nodeElement.outerHTML;
-                nodeElement.querySelector("wbr").remove();
+                setInsertWbrHTML(nodeElement, range, protyle);
             }
             event.stopPropagation();
         });
@@ -2097,9 +2103,7 @@ export class WYSIWYG {
                     // 微软双拼 keyup 会记录拼音字符，因此在 compositionstart 记录
                     !isComposition &&
                     (typeof protyle.wysiwyg.lastHTMLs[nodeElement.getAttribute("data-node-id")] === "undefined" || range.toString() !== "" || !this.preventKeyup)) {
-                    range.insertNode(document.createElement("wbr"));
-                    protyle.wysiwyg.lastHTMLs[nodeElement.getAttribute("data-node-id")] = nodeElement.outerHTML;
-                    nodeElement.querySelector("wbr").remove();
+                    setInsertWbrHTML(nodeElement, range, protyle);
                 }
                 this.preventKeyup = false;
                 return;
@@ -2120,7 +2124,7 @@ export class WYSIWYG {
             if (event.eventPhase !== 3 && !event.shiftKey && (event.key.indexOf("Arrow") > -1 || event.key === "Home" || event.key === "End" || event.key === "PageUp" || event.key === "PageDown") && !event.isComposing) {
                 if (nodeElement) {
                     this.setEmptyOutline(protyle, nodeElement);
-                    if (range.toString() === "") {
+                    if (range.toString() === "" && !nodeElement.classList.contains("protyle-wysiwyg--select")) {
                         countSelectWord(range, protyle.block.rootID);
                     }
                     if (protyle.breadcrumb) {
@@ -2438,7 +2442,7 @@ export class WYSIWYG {
                             app: protyle.app,
                             targetElement: embedItemElement,
                             isBacklink: false,
-                            nodeIds: [embedId],
+                            refDefs: [{refID: embedId}]
                         }));
                     }
                     /// #endif
@@ -2587,6 +2591,7 @@ export class WYSIWYG {
                 hasClosestByClassName(event.target, "iframe");
             if (!event.shiftKey && !ctrlIsPressed && selectElement) {
                 selectElement.classList.add("protyle-wysiwyg--select");
+                globalClickHideMenu(event.target);
                 event.stopPropagation();
                 return;
             }
@@ -2612,7 +2617,7 @@ export class WYSIWYG {
             }
 
             const emojiElement = hasTopClosestByClassName(event.target, "emoji");
-            if (!event.shiftKey && !ctrlIsPressed && emojiElement) {
+            if (!protyle.disabled && !event.shiftKey && !ctrlIsPressed && emojiElement) {
                 const nodeElement = hasClosestBlock(emojiElement);
                 if (nodeElement) {
                     const emojiRect = emojiElement.getBoundingClientRect();
@@ -2658,7 +2663,6 @@ export class WYSIWYG {
                 if (newRange.toString().replace(Constants.ZWSP, "") !== "") {
                     protyle.toolbar.render(protyle, newRange);
                 } else {
-                    hideElements(["toolbar"], protyle);
                     // https://github.com/siyuan-note/siyuan/issues/9785
                     protyle.toolbar.range = newRange;
                 }

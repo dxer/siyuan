@@ -73,6 +73,8 @@ import {copyPNGByLink} from "../../menus/util";
 import {globalCommand} from "./command/global";
 import {duplicateCompletely} from "../../protyle/render/av/action";
 import {copyTextByType} from "../../protyle/toolbar/util";
+import {onlyProtyleCommand} from "./command/protyle";
+import {cancelDrag} from "./dragover";
 
 const switchDialogEvent = (app: App, event: MouseEvent) => {
     event.preventDefault();
@@ -377,9 +379,23 @@ const editKeydown = (app: App, event: KeyboardEvent) => {
     }
     if (matchHotKey(window.siyuan.config.keymap.editor.general.switchReadonly.custom, event)) {
         event.preventDefault();
-        updateReadonly(protyle.breadcrumb.element.parentElement.querySelector('.block__icon[data-type="readonly"]'), protyle);
+        onlyProtyleCommand({
+            protyle,
+            command: "switchReadonly",
+            previousRange: range,
+        });
         return true;
     }
+    if (matchHotKey(window.siyuan.config.keymap.editor.general.switchAdjust.custom, event)) {
+        event.preventDefault();
+        onlyProtyleCommand({
+            protyle,
+            command: "switchAdjust",
+            previousRange: range,
+        });
+        return true;
+    }
+
     if (matchHotKey(window.siyuan.config.keymap.editor.general.backlinks.custom, event)) {
         event.preventDefault();
         if (range) {
@@ -1380,6 +1396,7 @@ export const windowKeyDown = (app: App, event: KeyboardEvent) => {
     }
 
     if (event.key === "Escape" && !event.isComposing) {
+        cancelDrag();
         const imgPreviewElement = document.querySelector(".protyle-img");
         if (imgPreviewElement) {
             imgPreviewElement.remove();

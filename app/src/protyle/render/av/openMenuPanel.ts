@@ -1,6 +1,6 @@
 import {transaction} from "../../wysiwyg/transaction";
 import {fetchPost} from "../../../util/fetch";
-import {addCol, bindEditEvent, duplicateCol, getColIconByType, getEditHTML, removeCol} from "./col";
+import {addCol, bindEditEvent, duplicateCol, getColIconByType, getColNameByType, getEditHTML, removeCol} from "./col";
 import {setPosition} from "../../../util/setPosition";
 import {hasClosestByAttribute, hasClosestByClassName} from "../../util/hasClosest";
 import {addColOptionOrCell, bindSelectEvent, getSelectHTML, removeCellOption, setColOption} from "./select";
@@ -874,13 +874,25 @@ export const openMenuPanel = (options: {
                     break;
                 } else if (type === "updateColType") {
                     if (target.dataset.newType !== target.dataset.oldType) {
-                        const name = (avPanelElement.querySelector('.b3-text-field[data-type="name"]') as HTMLInputElement).value;
-                        data.view.columns.find((item: IAVColumn) => item.id === options.colId).type = target.dataset.newType as TAVCol;
+                        const nameElement = avPanelElement.querySelector('.b3-text-field[data-type="name"]') as HTMLInputElement;
+                        const name = nameElement.value;
+                        let newName = name;
+                        data.view.columns.find((item: IAVColumn) => {
+                            if (item.id === options.colId) {
+                                item.type = target.dataset.newType as TAVCol;
+                                if (getColNameByType(target.dataset.oldType as TAVCol) === name) {
+                                    newName = getColNameByType(target.dataset.newType as TAVCol);
+                                    item.name = newName;
+                                }
+                                return true;
+                            }
+                        });
+
                         transaction(options.protyle, [{
                             action: "updateAttrViewCol",
                             id: options.colId,
                             avID,
-                            name,
+                            name: newName,
                             type: target.dataset.newType as TAVCol,
                         }], [{
                             action: "updateAttrViewCol",
@@ -1289,7 +1301,9 @@ export const openMenuPanel = (options: {
                     event.stopPropagation();
                     break;
                 } else if (type === "av-view-switch") {
-                    if (!target.querySelector(".b3-chip--primary")) {
+                    if (!target.parentElement.classList.contains("b3-menu__item--current")) {
+                        avPanelElement.querySelector(".b3-menu__item--current")?.classList.remove("b3-menu__item--current");
+                        target.parentElement.classList.add("b3-menu__item--current");
                         options.blockElement.removeAttribute("data-render");
                         avRender(options.blockElement, options.protyle, undefined, target.parentElement.dataset.id);
                     }
@@ -1297,13 +1311,15 @@ export const openMenuPanel = (options: {
                     event.stopPropagation();
                     break;
                 } else if (type === "av-view-edit") {
-                    if (target.parentElement.querySelector(".b3-chip--primary")) {
+                    if (target.parentElement.classList.contains("b3-menu__item--current")) {
                         openViewMenu({
                             protyle: options.protyle,
                             blockElement: options.blockElement as HTMLElement,
                             element: target.parentElement
                         });
                     } else {
+                        avPanelElement.querySelector(".b3-menu__item--current")?.classList.remove("b3-menu__item--current");
+                        target.parentElement.classList.add("b3-menu__item--current");
                         options.blockElement.removeAttribute("data-render");
                         avRender(options.blockElement, options.protyle, () => {
                             openViewMenu({
