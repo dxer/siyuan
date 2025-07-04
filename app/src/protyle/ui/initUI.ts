@@ -171,6 +171,7 @@ export const initUI = (protyle: IProtyle) => {
                     range.collapse(false);
                     focusByRange(range);
                 }
+                protyle.toolbar.range = range;
             }
         });
     });
@@ -203,9 +204,9 @@ export const initUI = (protyle: IProtyle) => {
             const embedElement = isInEmbedBlock(nodeElement);
             if (embedElement) {
                 protyle.gutter.render(protyle, embedElement, protyle.wysiwyg.element);
-            } else {
-                protyle.gutter.render(protyle, nodeElement, protyle.wysiwyg.element, event.target);
+                return;
             }
+            protyle.gutter.render(protyle, nodeElement, protyle.wysiwyg.element, event.target);
             return;
         }
 

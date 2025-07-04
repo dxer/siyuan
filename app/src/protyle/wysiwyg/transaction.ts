@@ -268,14 +268,14 @@ const updateEmbed = (protyle: IProtyle, operation: IOperation) => {
 
     const updateHTML = (item: Element, html: string) => {
         const tempElement = document.createElement("template");
-        tempElement.innerHTML = html;
+        tempElement.innerHTML = protyle.lute.SpinBlockDOM(html);
         tempElement.content.querySelectorAll('[contenteditable="true"]').forEach(editItem => {
             editItem.setAttribute("contenteditable", "false");
         });
         tempElement.content.querySelectorAll(".protyle-wysiwyg--select").forEach(selectItem => {
             selectItem.classList.remove("protyle-wysiwyg--select");
         });
-        const wbrElement = tempElement.querySelector("wbr");
+        const wbrElement = tempElement.content.querySelector("wbr");
         if (wbrElement) {
             wbrElement.remove();
         }
@@ -294,7 +294,7 @@ const updateEmbed = (protyle: IProtyle, operation: IOperation) => {
         } else {
             item.querySelectorAll(".protyle-wysiwyg__embed").forEach(embedBlockItem => {
                 const newTempElement = allTempElement.content.querySelector(`[data-node-id="${embedBlockItem.getAttribute("data-id")}"]`);
-                if (newTempElement) {
+                if (newTempElement && !isInEmbedBlock(newTempElement)) {
                     updateHTML(embedBlockItem.querySelector("[data-node-id]"), newTempElement.outerHTML);
                 }
             });
@@ -482,18 +482,20 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         // 缩放后仅更新局部 https://github.com/siyuan-note/siyuan/issues/14326
         if (updateElements.length === 0) {
             const newUpdateElement = protyle.wysiwyg.element.querySelector("[data-node-id]");
-            const newUpdateId = newUpdateElement.getAttribute("data-node-id");
-            const tempElement = document.createElement("template");
-            tempElement.innerHTML = operation.data;
-            const newTempElement = tempElement.content.querySelector(`[data-node-id="${newUpdateId}"]`);
-            if (newTempElement) {
-                updateElements.push(newUpdateElement);
-                operation.data = newTempElement.outerHTML;
-                operation.id = newUpdateId;
-                // https://github.com/siyuan-note/siyuan/issues/14326#issuecomment-2746140335
-                for (let i = 1; i < protyle.wysiwyg.element.childElementCount; i++) {
-                    protyle.wysiwyg.element.childNodes[i].remove();
-                    i--;
+            if (newUpdateElement) {
+                const newUpdateId = newUpdateElement.getAttribute("data-node-id");
+                const tempElement = document.createElement("template");
+                tempElement.innerHTML = operation.data;
+                const newTempElement = tempElement.content.querySelector(`[data-node-id="${newUpdateId}"]`);
+                if (newTempElement) {
+                    updateElements.push(newUpdateElement);
+                    operation.data = newTempElement.outerHTML;
+                    operation.id = newUpdateId;
+                    // https://github.com/siyuan-note/siyuan/issues/14326#issuecomment-2746140335
+                    for (let i = 1; i < protyle.wysiwyg.element.childElementCount; i++) {
+                        protyle.wysiwyg.element.childNodes[i].remove();
+                        i--;
+                    }
                 }
             }
         }
@@ -619,14 +621,19 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                     }, 450);
                 }
             });
-            if (data.new["custom-avs"] && !data.new["av-names"]) {
-                nodeAttrHTML += item.lastElementChild.querySelector(".protyle-attr--av")?.outerHTML || "";
+            if (data["data-av-type"]) {
+                item.setAttribute("data-av-type", data["data-av-type"]);
             }
-            const refElement = item.lastElementChild.querySelector(".protyle-attr--refcount");
+            const attrElements = item.querySelectorAll(".protyle-attr");
+            const attrElement = attrElements[attrElements.length - 1];
+            if (data.new["custom-avs"] && !data.new["av-names"]) {
+                nodeAttrHTML += attrElement.querySelector(".protyle-attr--av")?.outerHTML || "";
+            }
+            const refElement = attrElement.querySelector(".protyle-attr--refcount");
             if (refElement) {
                 nodeAttrHTML += refElement.outerHTML;
             }
-            item.lastElementChild.innerHTML = nodeAttrHTML + Constants.ZWSP;
+            attrElement.innerHTML = nodeAttrHTML + Constants.ZWSP;
         });
         return;
     }
@@ -845,8 +852,10 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         "setAttrViewSorts", "setAttrViewColCalc", "removeAttrViewCol", "updateAttrViewColNumberFormat", "removeAttrViewBlock",
         "replaceAttrViewBlock", "updateAttrViewColTemplate", "setAttrViewColPin", "addAttrViewView", "setAttrViewColIcon",
         "removeAttrViewView", "setAttrViewViewName", "setAttrViewViewIcon", "duplicateAttrViewView", "sortAttrViewView",
-        "updateAttrViewColRelation", "setAttrViewPageSize", "updateAttrViewColRollup", "sortAttrViewKey",
-        "duplicateAttrViewKey", "setAttrViewViewDesc", "setAttrViewColDesc"].includes(operation.action)) {
+        "updateAttrViewColRelation", "setAttrViewPageSize", "updateAttrViewColRollup", "sortAttrViewKey", "setAttrViewColDesc",
+        "duplicateAttrViewKey", "setAttrViewViewDesc", "setAttrViewCoverFrom", "setAttrViewCoverFromAssetKeyID",
+        "setAttrViewBlockView", "setAttrViewCardSize", "setAttrViewCardAspectRatio", "hideAttrViewName", "setAttrViewShowIcon",
+        "setAttrViewWrapField"].includes(operation.action)) {
         if (!isUndo) {
             // 撤销 transaction 会进行推送，需使用推送来进行刷新最新数据 https://github.com/siyuan-note/siyuan/issues/13607
             refreshAV(protyle, operation);
@@ -1278,7 +1287,7 @@ export const transaction = (protyle: IProtyle, doOperations: IOperation[], undoO
     window.clearTimeout(transactionsTimeout);
     // 加速折叠 https://github.com/siyuan-note/siyuan/issues/11828
     if (doOperations.length === 1 && (
-        doOperations[0].action === "unfoldHeading" ||
+        doOperations[0].action === "unfoldHeading" || doOperations[0].action === "setAttrViewBlockView" ||
         (doOperations[0].action === "setAttrs" && doOperations[0].data.startsWith('{"fold":'))
     )) {
         // 防止 needDebounce 为 true
